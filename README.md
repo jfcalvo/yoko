@@ -1,0 +1,52 @@
+![Yoko](yoko.png)
+
+**Yoko** is a small framework to make games with ruby. Yoko use mruby to allow your game be compiled for different platforms.
+
+It is inspired by other frameworks like [LÖVE](http://www.love2d.org) but following another ideas and patterns.
+
+# Warning
+
+Yoko is in a very early stage of development (let's say that it's an alpha version) so we can't ensure that API will not change in the future.
+
+# Install
+
+TODO
+
+# Examples
+
+A simple example of how to show a rotating square on screen is the following:
+
+```ruby
+square = nil
+
+config do |conf|
+  conf.window.title = 'Rotating Square Example'
+  conf.window.width = 800
+  conf.window.height = 600
+end
+
+load do
+  square = load_image('my_square_image.png')
+  square.x, square.y = 50, 50
+end
+
+update do
+  square.angle += 2.0
+
+  quit if key_pressed? 'escape'
+end
+
+draw do
+  square.draw
+end
+
+quit do
+  puts 'Closing our rotating square example!'
+end
+
+Yoko.loop
+```
+
+# API
+
+TODO
