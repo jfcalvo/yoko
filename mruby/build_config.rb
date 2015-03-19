@@ -22,6 +22,10 @@ MRuby::Build.new do |conf|
   # include the default GEMs
   conf.gembox 'default'
 
+  # yoko gems
+  conf.gem '../mruby-sdl2'
+  conf.gem '../yoko'
+
   # C compiler settings
   # conf.cc do |cc|
   #   cc.command = ENV['CC'] || 'gcc'
