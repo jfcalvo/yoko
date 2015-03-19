@@ -7,5 +7,6 @@ all:
 
 clean:
 	make clean -C mruby
+	mkdir -p bin
 	rm -f bin/yoko
 	rm -f bin/iyoko
