@@ -8,10 +8,6 @@ It is inspired by other frameworks like [LÖVE](http://www.love2d.org) but follo
 
 Yoko is in a very early stage of development (let's say that it's an alpha version) so we can't ensure that API will not change in the future.
 
-# Install
-
-TODO
-
 # Examples
 
 A simple example of how to show a rotating square on screen is the following:
@@ -45,6 +41,38 @@ quit do
 end
 
 Yoko.loop
+```
+
+# Install
+
+## Dependencies
+
+First you need to have installed some Yoko dependencies:
+
+- SDL2
+- SDL2_Image
+
+You can easily install them with brew (on MacOS):
+
+```sh
+$ brew install sdl2 sdl2_image
+```
+
+## Compilation
+
+After install dependencies you can compile yoko:
+
+```sh
+$ make
+```
+
+This will create some files under the `bin` directory, `yoko` interpreter and the interactive shell `iyoko`.
+
+You can execute your game with `yoko`:
+
+```sh
+$ cd bin
+$ ./yoko game.rb
 ```
 
 # API
