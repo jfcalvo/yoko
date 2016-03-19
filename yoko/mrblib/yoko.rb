@@ -7,13 +7,17 @@ module Yoko
         SDL2::Video::Window::SDL_WINDOWPOS_CENTERED,
         Yoko::Config::Window.width,
         Yoko::Config::Window.height,
-        SDL2::Video::Window::SDL_WINDOW_SHOWN);
+        SDL2::Video::Window::SDL_WINDOW_SHOWN
+      )
     end
 
     def renderer
-      @renderer ||= SDL2::Video::Renderer.new(window, -1,
+      @renderer ||= SDL2::Video::Renderer.new(
+        window,
+        -1,
         SDL2::Video::Renderer::SDL_RENDERER_ACCELERATED |
-        SDL2::Video::Renderer::SDL_RENDERER_PRESENTVSYNC)
+        SDL2::Video::Renderer::SDL_RENDERER_PRESENTVSYNC
+      )
     end
 
     def loop
@@ -26,7 +30,7 @@ module Yoko
       next_tick = SDL2::Timer.ticks
       sleep_time = 0
 
-      while !@quit
+      until @quit
         Yoko::Input.poll
 
         Yoko.renderer.clear
