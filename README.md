@@ -29,7 +29,7 @@ end
 update do
   square.angle += 2.0
 
-  quit if key_pressed? 'escape'
+  quit if key_pressed? :escape
 end
 
 draw do
