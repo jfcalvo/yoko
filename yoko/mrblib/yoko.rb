@@ -7,7 +7,7 @@ module Yoko
         SDL2::Video::Window::SDL_WINDOWPOS_CENTERED,
         Yoko::Config::Window.width,
         Yoko::Config::Window.height,
-        SDL2::Video::Window::SDL_WINDOW_SHOWN
+        window_flags
       )
     end
 
@@ -57,6 +57,25 @@ module Yoko
       yield Yoko::Config
     end
 
+    # Maybe we should move this method to a class with all the window methods
+    def set_fullscreen(mode)
+      # TODO: SDL_SetWindowFullscreen is not supported at the moment by mruby-sdl2
+      # I have opened a new issue on github related with this:
+      # https://github.com/crimsonwoods/mruby-sdl2/issues/6
+      # This method will not work until mruby-sdl2 supports the missing function.
+      # Maybe we should change the method too when added to mruby-sdl2
+      # case mode
+      # when :desktop
+      #   SDL_SetWindowFullscreen(Yoko.window, SDL_WINDOW_FULLSCREEN_DESKTOP)
+      # when :exclusive
+      #   SDL_SetWindowFullscreen(Yoko.window, SDL_WINDOW_FULLSCREEN)
+      # when :windowed
+      #   SDL_SetWindowFullscreen(Yoko.window, 0)
+      # else
+      #   raise "Fullscreen mode `#{mode}` is not valid."
+      # end
+    end
+
     def load(&block)
       @load_proc = block
     end
@@ -75,6 +94,27 @@ module Yoko
       else
         @quit = true
       end
+    end
+
+    private
+
+    def window_flags
+      # Initial window flags
+      window_flags = SDL2::Video::Window::SDL_WINDOW_SHOWN
+
+      # Check fullscreen flags
+      case Yoko::Config::Window.fullscreen
+      when :desktop
+        window_flags |= SDL2::Video::Window::SDL_WINDOW_FULLSCREEN_DESKTOP
+      when :exclusive
+        window_flags |= SDL2::Video::Window::SDL_WINDOW_FULLSCREEN
+      when :windowed
+        # Default fullscreen mode, we do nothing
+      else
+        raise "Fullscreen mode `#{Yoko::Config::Window.fullscreen}` is no valid."
+      end
+
+      window_flags
     end
   end
 end

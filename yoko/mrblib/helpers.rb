@@ -1,5 +1,9 @@
 # Maybe we should call this file sdl methods or something similar
 
+def set_fullscreen(mode)
+  Yoko.set_fullscreen(mode)
+end
+
 def key_pressed?(scancode_name)
   Yoko::Input::Keyboard.key_pressed? scancode_name
 end
