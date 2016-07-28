@@ -19,6 +19,7 @@ config do |conf|
   conf.window.title = 'Rotating Square Example'
   conf.window.width = 800
   conf.window.height = 600
+  conf.window.fullscreen = :exclusive # :desktop, :exclusive or :windowed (default)
 end
 
 load do
