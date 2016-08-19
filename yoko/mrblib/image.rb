@@ -4,7 +4,7 @@ module Yoko
     attr_accessor :x, :y, :width, :height, :angle
 
     def initialize(filename)
-      @surface = SDL2::Video::Surface.load_img(filename)
+      @surface = SDL2::Video::Surface.load_img(Yoko::Tools.expand_path(filename))
       @texture = SDL2::Video::Texture.new(Yoko.renderer, @surface)
       @angle = 0.0
       @width = @surface.clip_rect.w

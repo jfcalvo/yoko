@@ -24,6 +24,7 @@ MRuby::Build.new do |conf|
 
   # yoko gems
   conf.gem '../mruby-sdl2'
+  conf.gem '../mruby-io'
   conf.gem '../yoko'
 
   # C compiler settings
