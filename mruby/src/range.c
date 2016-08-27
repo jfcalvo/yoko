@@ -4,11 +4,11 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/class.h"
-#include "mruby/range.h"
-#include "mruby/string.h"
-#include "mruby/array.h"
+#include <mruby.h>
+#include <mruby/class.h>
+#include <mruby/range.h>
+#include <mruby/string.h>
+#include <mruby/array.h>
 
 #define RANGE_CLASS (mrb_class_get(mrb, "Range"))
 
@@ -290,7 +290,7 @@ range_to_s(mrb_state *mrb, mrb_value range)
   str2 = mrb_obj_as_string(mrb, r->edges->end);
   str  = mrb_str_dup(mrb, str);
   mrb_str_cat(mrb, str, "...", r->excl ? 3 : 2);
-  mrb_str_append(mrb, str, str2);
+  mrb_str_cat_str(mrb, str, str2);
 
   return str;
 }
@@ -315,7 +315,7 @@ range_inspect(mrb_state *mrb, mrb_value range)
   str2 = mrb_inspect(mrb, r->edges->end);
   str  = mrb_str_dup(mrb, str);
   mrb_str_cat(mrb, str, "...", r->excl ? 3 : 2);
-  mrb_str_append(mrb, str, str2);
+  mrb_str_cat_str(mrb, str, str2);
 
   return str;
 }

@@ -4,12 +4,12 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/string.h"
-#include "mruby/data.h"
-#include "mruby/class.h"
-#include "mruby/re.h"
-#include "mruby/irep.h"
+#include <mruby.h>
+#include <mruby/string.h>
+#include <mruby/data.h>
+#include <mruby/class.h>
+#include <mruby/re.h>
+#include <mruby/irep.h>
 
 MRB_API struct RData*
 mrb_data_object_alloc(mrb_state *mrb, struct RClass *klass, void *ptr, const mrb_data_type *type)
@@ -26,7 +26,7 @@ mrb_data_object_alloc(mrb_state *mrb, struct RClass *klass, void *ptr, const mrb
 MRB_API void
 mrb_data_check_type(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
 {
-  if (mrb_immediate_p(obj) || (mrb_type(obj) != MRB_TT_DATA)) {
+  if (mrb_type(obj) != MRB_TT_DATA) {
     mrb_check_type(mrb, obj, MRB_TT_DATA);
   }
   if (DATA_TYPE(obj) != type) {
@@ -48,7 +48,7 @@ mrb_data_check_type(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
 MRB_API void*
 mrb_data_check_get_ptr(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
 {
-  if (mrb_immediate_p(obj) || (mrb_type(obj) != MRB_TT_DATA)) {
+  if (mrb_type(obj) != MRB_TT_DATA) {
     return NULL;
   }
   if (DATA_TYPE(obj) != type) {
@@ -67,17 +67,15 @@ mrb_data_get_ptr(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
 MRB_API mrb_sym
 mrb_obj_to_sym(mrb_state *mrb, mrb_value name)
 {
-  mrb_value tmp;
   mrb_sym id;
 
   switch (mrb_type(name)) {
     default:
-      tmp = mrb_check_string_type(mrb, name);
-      if (mrb_nil_p(tmp)) {
-        tmp = mrb_inspect(mrb, name);
-        mrb_raisef(mrb, E_TYPE_ERROR, "%S is not a symbol", tmp);
+      name = mrb_check_string_type(mrb, name);
+      if (mrb_nil_p(name)) {
+        name = mrb_inspect(mrb, name);
+        mrb_raisef(mrb, E_TYPE_ERROR, "%S is not a symbol", name);
       }
-      name = tmp;
       /* fall through */
     case MRB_TT_STRING:
       name = mrb_str_intern(mrb, name);
@@ -181,7 +179,18 @@ mrb_word_boxing_cptr_value(mrb_state *mrb, void *p)
 MRB_API mrb_bool
 mrb_regexp_p(mrb_state *mrb, mrb_value v)
 {
-  return mrb_class_defined(mrb, REGEXP_CLASS) && mrb_obj_is_kind_of(mrb, v, mrb_class_get(mrb, REGEXP_CLASS));
+  if (mrb->flags & MRB_STATE_NO_REGEXP) {
+    return FALSE;
+  }
+  if ((mrb->flags & MRB_STATE_REGEXP) || mrb_class_defined(mrb, REGEXP_CLASS)) {
+    mrb->flags |= MRB_STATE_REGEXP;
+    return mrb_obj_is_kind_of(mrb, v, mrb_class_get(mrb, REGEXP_CLASS));
+  }
+  else {
+    mrb->flags |= MRB_STATE_REGEXP;
+    mrb->flags |= MRB_STATE_NO_REGEXP;
+  }
+  return FALSE;
 }
 
 #if defined _MSC_VER && _MSC_VER < 1900

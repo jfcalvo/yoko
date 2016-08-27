@@ -10,11 +10,7 @@ def t_print(*args)
   len = args.size
   while i < len
     str = args[i].to_s
-    begin
-      __printstr__ str
-    rescue NoMethodError
-      __t_printstr__ str rescue print str
-    end
+    __t_printstr__ str rescue print str
     i += 1
   end
 end
@@ -228,7 +224,8 @@ def report()
   t_print("Crash: #{$kill_test}\n")
 
   if Object.const_defined?(:Time)
-    t_print(" Time: #{Time.now - $test_start} seconds\n")
+    t_time = Time.now - $test_start
+    t_print(" Time: #{t_time.round(2)} seconds\n")
   end
 end
 

@@ -8,19 +8,17 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#include "mruby.h"
-#include "mruby/dump.h"
-#include "mruby/debug.h"
-#include "mruby/class.h"
-#include "mruby/opcode.h"
-#include "mruby/variable.h"
+#include <mruby.h>
+#include <mruby/dump.h>
+#include <mruby/debug.h>
+#include <mruby/class.h>
+#include <mruby/opcode.h>
+#include <mruby/variable.h>
 
 #include "mrdb.h"
 #include "apibreak.h"
 #include "apilist.h"
 
-void mrb_show_version(mrb_state *);
-void mrb_show_copyright(mrb_state *);
 void mrdb_state_free(mrb_state *);
 
 static mrb_debug_context *_debug_context = NULL;
@@ -59,6 +57,7 @@ static const debug_command debug_command_list[] = {
   {"quit",      NULL,           1, 0, 0, DBGCMD_QUIT,           dbgcmd_quit},            /* q[uit] */
   {"run",       NULL,           1, 0, 0, DBGCMD_RUN,            dbgcmd_run},             /* r[un] */
   {"step",      NULL,           1, 0, 1, DBGCMD_STEP,           dbgcmd_step},            /* s[tep] */
+  {"next",      NULL,           1, 0, 1, DBGCMD_NEXT,           dbgcmd_next},            /* n[ext] */
   {NULL}
 };
 
@@ -215,6 +214,7 @@ void
 mrb_debug_context_free(mrb_state *mrb)
 {
   if (_debug_context) {
+    mrb_debug_delete_break_all(mrb, _debug_context);
     mrb_free(mrb, _debug_context);
     _debug_context = NULL;
   }
@@ -223,9 +223,9 @@ mrb_debug_context_free(mrb_state *mrb)
 static mrdb_state*
 mrdb_state_new(mrb_state *mrb)
 {
-  mrdb_state *mrdb = mrb_malloc(mrb, sizeof(mrb_state));
+  mrdb_state *mrdb = mrb_malloc(mrb, sizeof(mrdb_state));
 
-  memset(mrdb, 0, sizeof(mrb_state));
+  memset(mrdb, 0, sizeof(mrdb_state));
 
   mrdb->dbg = mrb_debug_context_get(mrb);
   mrdb->command = mrb_malloc(mrb, MAX_COMMAND_LINE+1);
@@ -274,7 +274,7 @@ get_command(mrb_state *mrb, mrdb_state *mrdb)
   if (i == 0 && feof(stdin)) {
     clearerr(stdin);
     strcpy(mrdb->command, "quit");
-    i += strlen("quit");
+    i += sizeof("quit") - 1;
   }
 
   if (i == MAX_COMMAND_LINE) {
@@ -479,6 +479,7 @@ get_and_parse_command(mrb_state *mrb, mrdb_state *mrdb)
   while (!cmd) {
     for (p=NULL; !p || *p=='\0'; ) {
       printf("(%s:%d) ", mrdb->dbg->prvfile, mrdb->dbg->prvline);
+      fflush(stdout);
       p = get_command(mrb, mrdb);
     }
 
@@ -502,7 +503,7 @@ get_and_parse_command(mrb_state *mrb, mrdb_state *mrdb)
   return cmd;
 }
 
-static const int32_t
+static int32_t
 check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *regs)
 {
   struct RClass* c;
@@ -560,6 +561,7 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
     dbg->root_irep = irep;
     dbg->prvfile = NULL;
     dbg->prvline = 0;
+    dbg->prvci = NULL;
     dbg->xm = DBG_RUN;
     dbg->xphase = DBG_PHASE_RUNNING;
   }
@@ -569,12 +571,23 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
 
   switch (dbg->xm) {
   case DBG_STEP:
-  case DBG_NEXT:  // temporary
-    if (dbg->prvfile == file && dbg->prvline == line) {
+    if (!file || (dbg->prvfile == file && dbg->prvline == line)) {
       return;
     }
     dbg->method_bpno = 0;
     dbg->bm = BRK_STEP;
+    break;
+
+  case DBG_NEXT:
+    if (!file || (dbg->prvfile == file && dbg->prvline == line)) {
+      return;
+    }
+    if((intptr_t)(dbg->prvci) < (intptr_t)(mrb->c->ci)) {
+      return;
+    }
+    dbg->prvci = NULL;
+    dbg->method_bpno = 0;
+    dbg->bm = BRK_NEXT;
     break;
 
   case DBG_RUN:
@@ -650,12 +663,12 @@ main(int argc, char **argv)
   mrb_debug_context* dbg_backup;
   debug_command *cmd;
 
+ l_restart:
+
   if (mrb == NULL) {
     fputs("Invalid mrb_state, exiting mruby\n", stderr);
     return EXIT_FAILURE;
   }
-
- l_restart:
 
   /* parse command parameters */
   n = parse_args(mrb, argc, argv, &args);
