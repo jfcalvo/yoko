@@ -224,7 +224,7 @@ mrb_sdl2_video_surface_get_solor_key(mrb_state *mrb, mrb_value self)
   uint32_t key;
   int flag;
   SDL_Surface *s = mrb_sdl2_video_surface_get_ptr(mrb, self);
-  mrb_get_args(mrb, "ii", &flag, &key); 
+  mrb_get_args(mrb, "ii", &flag, &key);
   if (0 != SDL_SetColorKey(s, flag, key)) {
     mruby_sdl2_raise_error(mrb);
   }
@@ -348,6 +348,20 @@ mrb_sdl2_video_surface_unlock(mrb_state *mrb, mrb_value self)
   return self;
 }
 
+/*
+ * SDL2::Video::Surface::load_img
+ */
+static mrb_value
+mrb_sdl2_video_surface_load_img(mrb_state *mrb, mrb_value self)
+{
+  mrb_value file;
+  mrb_get_args(mrb, "S", &file);
+  SDL_Surface *surface = IMG_Load(RSTRING_PTR(file));
+  if (NULL == surface) {
+    mruby_sdl2_raise_error(mrb);
+  }
+  return mrb_sdl2_video_surface(mrb, surface, false);
+}
 
 /*
  * SDL2::Video::Surface::load_bmp
@@ -410,6 +424,7 @@ mruby_sdl2_video_surface_init(mrb_state *mrb, struct RClass *mod_Video)
   mrb_define_method(mrb, class_Surface, "lock",           mrb_sdl2_video_surface_lock,           ARGS_NONE());
   mrb_define_method(mrb, class_Surface, "unlock",         mrb_sdl2_video_surface_unlock,         ARGS_NONE());
 
+  mrb_define_class_method(mrb, class_Surface, "load_img", mrb_sdl2_video_surface_load_img, ARGS_REQ(1));
   mrb_define_class_method(mrb, class_Surface, "load_bmp", mrb_sdl2_video_surface_load_bmp, ARGS_REQ(1));
   mrb_define_class_method(mrb, class_Surface, "save_bmp", mrb_sdl2_video_surface_save_bmp, ARGS_REQ(2));
 }

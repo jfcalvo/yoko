@@ -3,6 +3,7 @@
 
 #include "sdl2.h"
 #include <SDL2/SDL_surface.h>
+#include <SDL_image.h>
 
 #ifdef __cplusplus
 extern "C" {
