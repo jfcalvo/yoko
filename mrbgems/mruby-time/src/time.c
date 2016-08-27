@@ -4,11 +4,26 @@
 ** See Copyright Notice in mruby.h
 */
 
+#include <math.h>
 #include <stdio.h>
 #include <time.h>
-#include "mruby.h"
-#include "mruby/class.h"
-#include "mruby/data.h"
+#include <mruby.h>
+#include <mruby/class.h>
+#include <mruby/data.h>
+
+#if _MSC_VER < 1800
+double round(double x) {
+  if (x >= 0.0) {
+    return (double)((int)(x + 0.5));
+  } else {
+    return (double)((int)(x - 0.5));
+  }
+}
+#endif
+
+#if !defined(__MINGW64__) && defined(_WIN32)
+# define llround(x) round(x)
+#endif
 
 #if defined(__MINGW64__) || defined(__MINGW32__)
 # include <sys/time.h>
@@ -198,22 +213,27 @@ static struct mrb_time*
 time_alloc(mrb_state *mrb, double sec, double usec, enum mrb_timezone timezone)
 {
   struct mrb_time *tm;
+  time_t tsec;
 
-  tm = (struct mrb_time *)mrb_malloc(mrb, sizeof(struct mrb_time));
-  tm->sec  = (time_t)sec;
   if (sizeof(time_t) == 4 && (sec > (double)INT32_MAX || (double)INT32_MIN > sec)) {
     goto out_of_range;
   }
-  else if ((sec > 0 && tm->sec < 0) || (sec < 0 && (double)tm->sec > sec)) {
+  if (sizeof(time_t) == 8 && (sec > (double)INT64_MAX || (double)INT64_MIN > sec)) {
+    goto out_of_range;
+  }
+  tsec  = (time_t)sec;
+  if ((sec > 0 && tsec < 0) || (sec < 0 && (double)tsec > sec)) {
   out_of_range:
     mrb_raisef(mrb, E_ARGUMENT_ERROR, "%S out of Time range", mrb_float_value(mrb, sec));
   }
-  tm->usec = (time_t)((sec - tm->sec) * 1.0e6 + usec);
+  tm = (struct mrb_time *)mrb_malloc(mrb, sizeof(struct mrb_time));
+  tm->sec  = tsec;
+  tm->usec = (time_t)llround((sec - tm->sec) * 1.0e6 + usec);
   while (tm->usec < 0) {
     tm->sec--;
     tm->usec += 1000000;
   }
-  while (tm->usec > 1000000) {
+  while (tm->usec >= 1000000) {
     tm->sec++;
     tm->usec -= 1000000;
   }
@@ -235,7 +255,17 @@ current_mrb_time(mrb_state *mrb)
   struct mrb_time *tm;
 
   tm = (struct mrb_time *)mrb_malloc(mrb, sizeof(*tm));
-#ifdef NO_GETTIMEOFDAY
+#if defined(TIME_UTC)
+  {
+    struct timespec ts;
+    if (timespec_get(&ts, TIME_UTC) == 0) {
+      mrb_free(mrb, tm);
+      mrb_raise(mrb, E_RUNTIME_ERROR, "timespec_get() failed for unknown reasons");
+    }
+    tm->sec = ts.tv_sec;
+    tm->usec = ts.tv_nsec / 1000;
+  }
+#elif defined(NO_GETTIMEOFDAY)
   {
     static time_t last_sec = 0, last_usec = 0;
 

@@ -7,22 +7,22 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <math.h>
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/hash.h"
-#include "mruby/irep.h"
-#include "mruby/numeric.h"
-#include "mruby/proc.h"
-#include "mruby/range.h"
-#include "mruby/string.h"
-#include "mruby/variable.h"
-#include "mruby/error.h"
-#include "mruby/opcode.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/hash.h>
+#include <mruby/irep.h>
+#include <mruby/numeric.h>
+#include <mruby/proc.h>
+#include <mruby/range.h>
+#include <mruby/string.h>
+#include <mruby/variable.h>
+#include <mruby/error.h>
+#include <mruby/opcode.h>
 #include "value_array.h"
-#include "mrb_throw.h"
+#include <mruby/throw.h>
 
-#ifndef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -52,7 +52,7 @@ The value below allows about 60000 recursive calls in the simplest case. */
 # define DEBUG(x)
 #endif
 
-#define ARENA_RESTORE(mrb,ai) (mrb)->arena_idx = (ai)
+#define ARENA_RESTORE(mrb,ai) (mrb)->gc.arena_idx = (ai)
 
 static inline void
 stack_clear(mrb_value *from, size_t count)
@@ -209,6 +209,7 @@ top_env(mrb_state *mrb, struct RProc *proc)
 
 #define CI_ACC_SKIP    -1
 #define CI_ACC_DIRECT  -2
+#define CI_ACC_RESUMED -3
 
 static mrb_callinfo*
 cipush(mrb_state *mrb)
@@ -220,7 +221,7 @@ cipush(mrb_state *mrb)
   int ridx = ci->ridx;
 
   if (ci + 1 == c->ciend) {
-    size_t size = ci - c->cibase;
+    ptrdiff_t size = ci - c->cibase;
 
     c->cibase = (mrb_callinfo *)mrb_realloc(mrb, c->cibase, sizeof(mrb_callinfo)*size*2);
     c->ci = c->cibase + size;
@@ -237,26 +238,34 @@ cipush(mrb_state *mrb)
   return ci;
 }
 
+MRB_API void
+mrb_env_unshare(mrb_state *mrb, struct REnv *e)
+{
+  size_t len = (size_t)MRB_ENV_STACK_LEN(e);
+  mrb_value *p = (mrb_value *)mrb_malloc(mrb, sizeof(mrb_value)*len);
+
+  MRB_ENV_UNSHARE_STACK(e);
+  if (len > 0) {
+    stack_copy(p, e->stack, len);
+  }
+  e->stack = p;
+  mrb_write_barrier(mrb, (struct RBasic *)e);
+}
+
 static void
 cipop(mrb_state *mrb)
 {
   struct mrb_context *c = mrb->c;
-
-  if (c->ci->env) {
-    struct REnv *e = c->ci->env;
-    size_t len = (size_t)MRB_ENV_STACK_LEN(e);
-    mrb_value *p = (mrb_value *)mrb_malloc(mrb, sizeof(mrb_value)*len);
-
-    MRB_ENV_UNSHARE_STACK(e);
-    if (len > 0) {
-      stack_copy(p, e->stack, len);
-    }
-    e->stack = p;
-    mrb_write_barrier(mrb, (struct RBasic *)e);
-  }
+  struct REnv *env = c->ci->env;
 
   c->ci--;
+
+  if (env) {
+    mrb_env_unshare(mrb, env);
+  }
 }
+
+void mrb_exc_set(mrb_state *mrb, mrb_value exc);
 
 static void
 ecall(mrb_state *mrb, int i)
@@ -266,6 +275,7 @@ ecall(mrb_state *mrb, int i)
   mrb_value *self = mrb->c->stack;
   struct RObject *exc;
 
+  if (i<0) return;
   p = mrb->c->ensure[i];
   if (!p) return;
   if (mrb->c->ci->eidx > i)
@@ -316,7 +326,7 @@ mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc
 
   if (!mrb->jmp) {
     struct mrb_jmpbuf c_jmp;
-    mrb_callinfo *old_ci = mrb->c->ci;
+    ptrdiff_t nth_ci = mrb->c->ci - mrb->c->cibase;
 
     MRB_TRY(&c_jmp) {
       mrb->jmp = &c_jmp;
@@ -325,7 +335,7 @@ mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc
       mrb->jmp = 0;
     }
     MRB_CATCH(&c_jmp) { /* error */
-      while (old_ci != mrb->c->ci) {
+      while (nth_ci < (mrb->c->ci - mrb->c->cibase)) {
         mrb->c->stack = mrb->c->ci->stackent;
         cipop(mrb);
       }
@@ -340,6 +350,7 @@ mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc
     mrb_sym undef = 0;
     mrb_callinfo *ci;
     int n;
+    ptrdiff_t voff = -1;
 
     if (!mrb->c->stack) {
       stack_init(mrb);
@@ -363,6 +374,9 @@ mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc
     ci->argc = argc;
     ci->target_class = c;
     mrb->c->stack = mrb->c->stack + n;
+    if (mrb->c->stbase <= argv && argv < mrb->c->stend) {
+      voff = argv - mrb->c->stbase;
+    }
     if (MRB_PROC_CFUNC_P(p)) {
       ci->nregs = argc + 2;
       stack_extend(mrb, ci->nregs, 0);
@@ -370,6 +384,9 @@ mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc
     else {
       ci->nregs = p->body.irep->nregs + n;
       stack_extend(mrb, ci->nregs, argc+2);
+    }
+    if (voff >= 0) {
+      argv = mrb->c->stbase + voff;
     }
     mrb->c->stack[0] = self;
     if (undef) {
@@ -465,6 +482,13 @@ mrb_f_send(mrb_state *mrb, mrb_value self)
     return p->body.func(mrb, self);
   }
 
+  if (ci->argc < 0) {
+    stack_extend(mrb, (p->body.irep->nregs < 3) ? 3 : p->body.irep->nregs, 3);
+  }
+  else {
+    stack_extend(mrb, p->body.irep->nregs, ci->argc+2);
+  }
+
   ci->nregs = p->body.irep->nregs;
   ci = cipush(mrb);
   ci->nregs = 0;
@@ -481,21 +505,32 @@ eval_under(mrb_state *mrb, mrb_value self, mrb_value blk, struct RClass *c)
 {
   struct RProc *p;
   mrb_callinfo *ci;
+  mrb_int max = 3;
 
   if (mrb_nil_p(blk)) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "no block given");
   }
   ci = mrb->c->ci;
   if (ci->acc == CI_ACC_DIRECT) {
-    return mrb_yield_with_class(mrb, blk, 0, 0, self, c);
+    return mrb_yield_with_class(mrb, blk, 1, &self, self, c);
   }
   ci->target_class = c;
   p = mrb_proc_ptr(blk);
   ci->proc = p;
+  ci->argc = 1;
   if (MRB_PROC_CFUNC_P(p)) {
+    stack_extend(mrb, 3, 0);
+    mrb->c->stack[0] = self;
+    mrb->c->stack[1] = self;
+    mrb->c->stack[2] = mrb_nil_value();
     return p->body.func(mrb, self);
   }
   ci->nregs = p->body.irep->nregs;
+  if (max < ci->nregs) max = ci->nregs;
+  stack_extend(mrb, max, 0);
+  mrb->c->stack[0] = self;
+  mrb->c->stack[1] = self;
+  mrb->c->stack[2] = mrb_nil_value();
   ci = cipush(mrb);
   ci->nregs = 0;
   ci->target_class = 0;
@@ -654,7 +689,7 @@ localjump_error(mrb_state *mrb, localjump_error_kind kind)
   mrb_str_cat(mrb, msg, lead, sizeof(lead) - 1);
   mrb_str_cat(mrb, msg, kind_str[kind], kind_str_len[kind]);
   exc = mrb_exc_new_str(mrb, E_LOCALJUMP_ERROR, msg);
-  mrb->exc = mrb_obj_ptr(exc);
+  mrb_exc_set(mrb, exc);
 }
 
 static void
@@ -673,12 +708,12 @@ argnum_error(mrb_state *mrb, mrb_int num)
                   mrb_fixnum_value(mrb->c->ci->argc), mrb_fixnum_value(num));
   }
   exc = mrb_exc_new_str(mrb, E_ARGUMENT_ERROR, str);
-  mrb->exc = mrb_obj_ptr(exc);
+  mrb_exc_set(mrb, exc);
 }
 
 #define ERR_PC_SET(mrb, pc) mrb->c->ci->err = pc;
 #define ERR_PC_CLR(mrb)     mrb->c->ci->err = 0;
-#ifdef ENABLE_DEBUG
+#ifdef MRB_ENABLE_DEBUG_HOOK
 #define CODE_FETCH_HOOK(mrb, irep, pc, regs) if ((mrb)->code_fetch_hook) (mrb)->code_fetch_hook((mrb), (irep), (pc), (regs));
 #else
 #define CODE_FETCH_HOOK(mrb, irep, pc, regs)
@@ -707,20 +742,30 @@ argnum_error(mrb_state *mrb, mrb_int num)
 
 #endif
 
-mrb_value mrb_gv_val_get(mrb_state *mrb, mrb_sym sym);
-void mrb_gv_val_set(mrb_state *mrb, mrb_sym sym, mrb_value val);
-
 #define CALL_MAXARGS 127
 
+void mrb_method_missing(mrb_state *mrb, mrb_sym name, mrb_value self, mrb_value args);
+
 MRB_API mrb_value
-mrb_context_run(mrb_state *mrb, struct RProc *proc, mrb_value self, unsigned int stack_keep)
+mrb_vm_run(mrb_state *mrb, struct RProc *proc, mrb_value self, unsigned int stack_keep)
+{
+  mrb_irep *irep = proc->body.irep;
+
+  if (!mrb->c->stack) {
+    stack_init(mrb);
+  }
+  stack_extend(mrb, irep->nregs, stack_keep);
+  mrb->c->stack[0] = self;
+  return mrb_vm_exec(mrb, proc, irep->iseq);
+}
+
+MRB_API mrb_value
+mrb_vm_exec(mrb_state *mrb, struct RProc *proc, mrb_code *pc)
 {
   /* mrb_assert(mrb_proc_cfunc_p(proc)) */
   mrb_irep *irep = proc->body.irep;
-  mrb_code *pc = irep->iseq;
   mrb_value *pool = irep->pool;
   mrb_sym *syms = irep->syms;
-  mrb_value *regs = NULL;
   mrb_code i;
   int ai = mrb_gc_arena_save(mrb);
   struct mrb_jmpbuf *prev_jmp = mrb->jmp;
@@ -761,15 +806,10 @@ RETRY_TRY_BLOCK:
     goto L_RAISE;
   }
   mrb->jmp = &c_jmp;
-  if (!mrb->c->stack) {
-    stack_init(mrb);
-  }
-  stack_extend(mrb, irep->nregs, stack_keep);
   mrb->c->ci->proc = proc;
   mrb->c->ci->nregs = irep->nregs;
-  regs = mrb->c->stack;
-  regs[0] = self;
 
+#define regs (mrb->c->stack)
   INIT_DISPATCH {
     CASE(OP_NOP) {
       /* do nothing */
@@ -875,7 +915,6 @@ RETRY_TRY_BLOCK:
       ERR_PC_SET(mrb, pc);
       val = mrb_vm_const_get(mrb, syms[GETARG_Bx(i)]);
       ERR_PC_CLR(mrb);
-      regs = mrb->c->stack;
       regs[GETARG_A(i)] = val;
       NEXT;
     }
@@ -894,7 +933,6 @@ RETRY_TRY_BLOCK:
       ERR_PC_SET(mrb, pc);
       val = mrb_const_get(mrb, regs[a], syms[GETARG_Bx(i)]);
       ERR_PC_CLR(mrb);
-      regs = mrb->c->stack;
       regs[a] = val;
       NEXT;
     }
@@ -993,7 +1031,7 @@ RETRY_TRY_BLOCK:
 
     CASE(OP_RAISE) {
       /* A      raise(R(A)) */
-      mrb->exc = mrb_obj_ptr(regs[GETARG_A(i)]);
+      mrb_exc_set(mrb, regs[GETARG_A(i)]);
       goto L_RAISE;
     }
 
@@ -1019,7 +1057,7 @@ RETRY_TRY_BLOCK:
       mrb_callinfo *ci = mrb->c->ci;
       int n, eidx = ci->eidx;
 
-      for (n=0; n<a && eidx > ci[-1].eidx; n++) {
+      for (n=0; n<a && (ci == mrb->c->cibase || eidx > ci[-1].eidx); n++) {
         ecall(mrb, --eidx);
         ARENA_RESTORE(mrb, ai);
       }
@@ -1063,9 +1101,21 @@ RETRY_TRY_BLOCK:
       m = mrb_method_search_vm(mrb, &c, mid);
       if (!m) {
         mrb_value sym = mrb_symbol_value(mid);
+        mrb_sym missing = mrb_intern_lit(mrb, "method_missing");
 
-        mid = mrb_intern_lit(mrb, "method_missing");
-        m = mrb_method_search_vm(mrb, &c, mid);
+        m = mrb_method_search_vm(mrb, &c, missing);
+        if (!m) {
+          mrb_value args;
+
+          if (n == CALL_MAXARGS) {
+            args = regs[a+1];
+          }
+          else {
+            args = mrb_ary_new_from_values(mrb, n, regs+a+1);
+          }
+          mrb_method_missing(mrb, mid, recv, args);
+        }
+        mid = missing;
         if (n == CALL_MAXARGS) {
           mrb_ary_unshift(mrb, regs[a+1], sym);
         }
@@ -1080,12 +1130,7 @@ RETRY_TRY_BLOCK:
       ci->mid = mid;
       ci->proc = m;
       ci->stackent = mrb->c->stack;
-      if (c->tt == MRB_TT_ICLASS) {
-        ci->target_class = c->c;
-      }
-      else {
-        ci->target_class = c;
-      }
+      ci->target_class = c;
 
       ci->pc = pc + 1;
       ci->acc = a;
@@ -1103,20 +1148,25 @@ RETRY_TRY_BLOCK:
           ci->nregs = n + 2;
         }
         result = m->body.func(mrb, recv);
-        mrb->c->stack[0] = result;
         mrb_gc_arena_restore(mrb, ai);
         if (mrb->exc) goto L_RAISE;
         /* pop stackpos */
         ci = mrb->c->ci;
         if (!ci->target_class) { /* return from context modifying method (resume/yield) */
-          if (!MRB_PROC_CFUNC_P(ci[-1].proc)) {
+          if (ci->acc == CI_ACC_RESUMED) {
+            mrb->jmp = prev_jmp;
+            return result;
+          }
+          else {
+            mrb_assert(!MRB_PROC_CFUNC_P(ci[-1].proc));
             proc = ci[-1].proc;
             irep = proc->body.irep;
             pool = irep->pool;
             syms = irep->syms;
           }
         }
-        regs = mrb->c->stack = ci->stackent;
+        mrb->c->stack[0] = result;
+        mrb->c->stack = ci->stackent;
         pc = ci->pc;
         cipop(mrb);
         JUMP;
@@ -1136,7 +1186,6 @@ RETRY_TRY_BLOCK:
           ci->argc = n;
           stack_extend(mrb, irep->nregs,  n+2);
         }
-        regs = mrb->c->stack;
         pc = irep->iseq;
         JUMP;
       }
@@ -1173,7 +1222,7 @@ RETRY_TRY_BLOCK:
         if (mrb->exc) goto L_RAISE;
         /* pop stackpos */
         ci = mrb->c->ci;
-        regs = mrb->c->stack = ci->stackent;
+        mrb->c->stack = ci->stackent;
         regs[ci->acc] = recv;
         pc = ci->pc;
         cipop(mrb);
@@ -1199,7 +1248,6 @@ RETRY_TRY_BLOCK:
         else {
           stack_extend(mrb, irep->nregs, ci->argc+2);
         }
-        regs = mrb->c->stack;
         regs[0] = m->env->stack[0];
         pc = irep->iseq;
         JUMP;
@@ -1216,6 +1264,13 @@ RETRY_TRY_BLOCK:
       int a = GETARG_A(i);
       int n = GETARG_C(i);
 
+      if (mid == 0) {
+        mrb_value exc;
+
+        exc = mrb_exc_new_str_lit(mrb, E_NOMETHOD_ERROR, "super called outside of method");
+        mrb_exc_set(mrb, exc);
+        goto L_RAISE;
+      }
       recv = regs[0];
       c = mrb->c->ci->target_class->super;
       m = mrb_method_search_vm(mrb, &c, mid);
@@ -1250,12 +1305,17 @@ RETRY_TRY_BLOCK:
       mrb->c->stack[0] = recv;
 
       if (MRB_PROC_CFUNC_P(m)) {
-        ci->nregs = 0;
+        if (n == CALL_MAXARGS) {
+          ci->nregs = 3;
+        }
+        else {
+          ci->nregs = n + 2;
+        }
         mrb->c->stack[0] = m->body.func(mrb, recv);
         mrb_gc_arena_restore(mrb, ai);
         if (mrb->exc) goto L_RAISE;
         /* pop stackpos */
-        regs = mrb->c->stack = mrb->c->ci->stackent;
+        mrb->c->stack = mrb->c->ci->stackent;
         cipop(mrb);
         NEXT;
       }
@@ -1275,7 +1335,6 @@ RETRY_TRY_BLOCK:
         else {
           stack_extend(mrb, irep->nregs, ci->argc+2);
         }
-        regs = mrb->c->stack;
         pc = irep->iseq;
         JUMP;
       }
@@ -1296,8 +1355,9 @@ RETRY_TRY_BLOCK:
         struct REnv *e = uvenv(mrb, lv-1);
         if (!e) {
           mrb_value exc;
+
           exc = mrb_exc_new_str_lit(mrb, E_NOMETHOD_ERROR, "super called outside of method");
-          mrb->exc = mrb_obj_ptr(exc);
+          mrb_exc_set(mrb, exc);
           goto L_RAISE;
         }
         stack = e->stack + 1;
@@ -1452,9 +1512,6 @@ RETRY_TRY_BLOCK:
           if (ci->ridx == 0) goto L_STOP;
           goto L_RESCUE;
         }
-        while (eidx > ci[-1].eidx) {
-          ecall(mrb, --eidx);
-        }
         while (ci[0].ridx == ci[-1].ridx) {
           cipop(mrb);
           ci = mrb->c->ci;
@@ -1463,15 +1520,13 @@ RETRY_TRY_BLOCK:
             mrb->jmp = prev_jmp;
             MRB_THROW(prev_jmp);
           }
-          if (ci > mrb->c->cibase) {
-            while (eidx > ci[-1].eidx) {
+          if (ci == mrb->c->cibase) {
+            while (eidx > 0) {
               ecall(mrb, --eidx);
             }
-          }
-          else if (ci == mrb->c->cibase) {
             if (ci->ridx == 0) {
               if (mrb->c == mrb->root_c) {
-                regs = mrb->c->stack = mrb->c->stbase;
+                mrb->c->stack = mrb->c->stbase;
                 goto L_STOP;
               }
               else {
@@ -1484,6 +1539,12 @@ RETRY_TRY_BLOCK:
             }
             break;
           }
+          /* call ensure only when we skip this callinfo */
+          if (ci[0].ridx == ci[-1].ridx) {
+            while (eidx > ci[-1].eidx) {
+              ecall(mrb, --eidx);
+            }
+          }
         }
       L_RESCUE:
         if (ci->ridx == 0) goto L_STOP;
@@ -1491,7 +1552,7 @@ RETRY_TRY_BLOCK:
         irep = proc->body.irep;
         pool = irep->pool;
         syms = irep->syms;
-        regs = mrb->c->stack = ci[1].stackent;
+        mrb->c->stack = ci[1].stackent;
         pc = mrb->c->rescue[--ci->ridx];
       }
       else {
@@ -1514,6 +1575,7 @@ RETRY_TRY_BLOCK:
               localjump_error(mrb, LOCALJUMP_ERROR_RETURN);
               goto L_RAISE;
             }
+            mrb->c->stack = mrb->c->ci->stackent;
             mrb->c->ci = ci;
             break;
           }
@@ -1525,7 +1587,7 @@ RETRY_TRY_BLOCK:
             }
             if (mrb->c->prev->ci == mrb->c->prev->cibase) {
               mrb_value exc = mrb_exc_new_str_lit(mrb, E_FIBER_ERROR, "double resume");
-              mrb->exc = mrb_obj_ptr(exc);
+              mrb_exc_set(mrb, exc);
               goto L_RAISE;
             }
             /* automatic yield at the end */
@@ -1548,6 +1610,7 @@ RETRY_TRY_BLOCK:
             c->prev = NULL;
           }
           ci = mrb->c->ci;
+          mrb->c->stack = ci->stackent;
           mrb->c->ci = mrb->c->cibase + proc->env->cioff + 1;
           while (ci > mrb->c->ci) {
             if (ci[-1].acc == CI_ACC_SKIP) {
@@ -1564,14 +1627,19 @@ RETRY_TRY_BLOCK:
         while (eidx > mrb->c->ci[-1].eidx) {
           ecall(mrb, --eidx);
         }
+        if (mrb->c->vmexec && !mrb->c->ci->target_class) {
+          mrb->c->vmexec = FALSE;
+          mrb->jmp = prev_jmp;
+          return v;
+        }
         cipop(mrb);
         acc = ci->acc;
-        pc = ci->pc;
-        regs = mrb->c->stack = ci->stackent;
+        mrb->c->stack = ci->stackent;
         if (acc == CI_ACC_SKIP) {
           mrb->jmp = prev_jmp;
           return v;
         }
+        pc = ci->pc;
         DEBUG(printf("from :%s\n", mrb_sym2name(mrb, ci->mid)));
         proc = mrb->c->ci->proc;
         irep = proc->body.irep;
@@ -1640,7 +1708,6 @@ RETRY_TRY_BLOCK:
         else {
           stack_extend(mrb, irep->nregs, ci->argc+2);
         }
-        regs = mrb->c->stack;
         pc = irep->iseq;
       }
       JUMP;
@@ -1664,6 +1731,10 @@ RETRY_TRY_BLOCK:
           goto L_RAISE;
         }
         stack = e->stack + 1;
+      }
+      if (mrb_nil_p(stack[m1+r+m2])) {
+        localjump_error(mrb, LOCALJUMP_ERROR_YIELD);
+        goto L_RAISE;
       }
       regs[a] = stack[m1+r+m2];
       NEXT;
@@ -1795,25 +1866,15 @@ RETRY_TRY_BLOCK:
       switch (TYPES2(mrb_type(regs[a]),mrb_type(regs[a+1]))) {
       case TYPES2(MRB_TT_FIXNUM,MRB_TT_FIXNUM):
         {
-          mrb_value z;
+          mrb_int x, y, z;
 
-          z = mrb_fixnum_mul(mrb, regs[a], regs[a+1]);
-
-          switch (mrb_type(z)) {
-          case MRB_TT_FIXNUM:
-            {
-              SET_INT_VALUE(regs[a], mrb_fixnum(z));
-            }
-            break;
-          case MRB_TT_FLOAT:
-            {
-              SET_FLOAT_VALUE(mrb, regs[a], mrb_float(z));
-            }
-            break;
-          default:
-            /* cannot happen */
+          x = mrb_fixnum(regs[a]);
+          y = mrb_fixnum(regs[a+1]);
+          if (mrb_int_mul_overflow(x, y, &z)) {
+            SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x * (mrb_float)y);
             break;
           }
+          SET_INT_VALUE(regs[a], z);
         }
         break;
       case TYPES2(MRB_TT_FIXNUM,MRB_TT_FLOAT):
@@ -1920,7 +1981,7 @@ RETRY_TRY_BLOCK:
             SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x + (mrb_float)y);
             break;
           }
-          mrb_fixnum(regs[a]) = z;
+          SET_INT_VALUE(regs[a], z);
         }
         break;
       case MRB_TT_FLOAT:
@@ -1958,7 +2019,7 @@ RETRY_TRY_BLOCK:
             SET_FLOAT_VALUE(mrb, regs_a[0], (mrb_float)x - (mrb_float)y);
           }
           else {
-            mrb_fixnum(regs_a[0]) = z;
+            SET_INT_VALUE(regs_a[0], z);
           }
         }
         break;
@@ -2103,33 +2164,28 @@ RETRY_TRY_BLOCK:
       int pre  = GETARG_B(i);
       int post = GETARG_C(i);
 
+      struct RArray *ary;
+      int len, idx;
+
       if (!mrb_array_p(v)) {
-        regs[a++] = mrb_ary_new_capa(mrb, 0);
+        v = mrb_ary_new_from_values(mrb, 1, &regs[a]);
+      }
+      ary = mrb_ary_ptr(v);
+      len = ary->len;
+      if (len > pre + post) {
+        regs[a++] = mrb_ary_new_from_values(mrb, len - pre - post, ary->ptr+pre);
         while (post--) {
-          SET_NIL_VALUE(regs[a]);
-          a++;
+          regs[a++] = ary->ptr[len-post-1];
         }
       }
       else {
-        struct RArray *ary = mrb_ary_ptr(v);
-        int len = ary->len;
-        int idx;
-
-        if (len > pre + post) {
-          regs[a++] = mrb_ary_new_from_values(mrb, len - pre - post, ary->ptr+pre);
-          while (post--) {
-            regs[a++] = ary->ptr[len-post-1];
-          }
+        regs[a++] = mrb_ary_new_capa(mrb, 0);
+        for (idx=0; idx+pre<len; idx++) {
+          regs[a+idx] = ary->ptr[pre+idx];
         }
-        else {
-          regs[a++] = mrb_ary_new_capa(mrb, 0);
-          for (idx=0; idx+pre<len; idx++) {
-            regs[a+idx] = ary->ptr[pre+idx];
-          }
-          while (idx < post) {
-            SET_NIL_VALUE(regs[a+idx]);
-            idx++;
-          }
+        while (idx < post) {
+          SET_NIL_VALUE(regs[a+idx]);
+          idx++;
         }
       }
       ARENA_RESTORE(mrb, ai);
@@ -2175,15 +2231,6 @@ RETRY_TRY_BLOCK:
       }
       else {
         p = mrb_proc_new(mrb, irep->reps[GETARG_b(i)]);
-        if (c & OP_L_METHOD) {
-          if (p->target_class->tt == MRB_TT_SCLASS) {
-            mrb_value klass;
-            klass = mrb_obj_iv_get(mrb,
-                                   (struct RObject *)p->target_class,
-                                   mrb_intern_lit(mrb, "__attached__"));
-            p->target_class = mrb_class_ptr(klass);
-          }
-        }
       }
       if (c & OP_L_STRICT) p->flags |= MRB_PROC_STRICT;
       regs[GETARG_A(i)] = mrb_obj_value(p);
@@ -2261,7 +2308,7 @@ RETRY_TRY_BLOCK:
         mrb_gc_arena_restore(mrb, ai);
         if (mrb->exc) goto L_RAISE;
         /* pop stackpos */
-        regs = mrb->c->stack = mrb->c->ci->stackent;
+        mrb->c->stack = mrb->c->ci->stackent;
         cipop(mrb);
         NEXT;
       }
@@ -2271,7 +2318,6 @@ RETRY_TRY_BLOCK:
         syms = irep->syms;
         stack_extend(mrb, irep->nregs, 1);
         ci->nregs = irep->nregs;
-        regs = mrb->c->stack;
         pc = irep->iseq;
         JUMP;
       }
@@ -2281,8 +2327,9 @@ RETRY_TRY_BLOCK:
       /* A B            R(A).newmethod(Syms(B),R(A+1)) */
       int a = GETARG_A(i);
       struct RClass *c = mrb_class_ptr(regs[a]);
+      struct RProc *p = mrb_proc_ptr(regs[a+1]);
 
-      mrb_define_method_vm(mrb, c, syms[GETARG_B(i)], regs[a+1]);
+      mrb_define_method_raw(mrb, c, syms[GETARG_B(i)], p);
       ARENA_RESTORE(mrb, ai);
       NEXT;
     }
@@ -2298,7 +2345,7 @@ RETRY_TRY_BLOCK:
       /* A      R(A) := target_class */
       if (!mrb->c->ci->target_class) {
         mrb_value exc = mrb_exc_new_str_lit(mrb, E_TYPE_ERROR, "no target class or module");
-        mrb->exc = mrb_obj_ptr(exc);
+        mrb_exc_set(mrb, exc);
         goto L_RAISE;
       }
       regs[GETARG_A(i)] = mrb_obj_value(mrb->c->ci->target_class);
@@ -2315,10 +2362,10 @@ RETRY_TRY_BLOCK:
 
     CASE(OP_DEBUG) {
       /* A B C    debug print R(A),R(B),R(C) */
-#ifdef ENABLE_DEBUG
+#ifdef MRB_ENABLE_DEBUG_HOOK
       mrb->debug_op_hook(mrb, irep, pc, regs);
 #else
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
       printf("OP_DEBUG %d %d %d\n", GETARG_A(i), GETARG_B(i), GETARG_C(i));
 #else
       abort();
@@ -2356,11 +2403,12 @@ RETRY_TRY_BLOCK:
       else {
         exc = mrb_exc_new_str(mrb, E_LOCALJUMP_ERROR, msg);
       }
-      mrb->exc = mrb_obj_ptr(exc);
+      mrb_exc_set(mrb, exc);
       goto L_RAISE;
     }
   }
   END_DISPATCH;
+#undef regs
 
   }
   MRB_CATCH(&c_jmp) {
@@ -2373,30 +2421,24 @@ RETRY_TRY_BLOCK:
 MRB_API mrb_value
 mrb_run(mrb_state *mrb, struct RProc *proc, mrb_value self)
 {
-  return mrb_context_run(mrb, proc, self, mrb->c->ci->argc + 2); /* argc + 2 (receiver and block) */
+  return mrb_vm_run(mrb, proc, self, mrb->c->ci->argc + 2); /* argc + 2 (receiver and block) */
 }
 
 MRB_API mrb_value
-mrb_toplevel_run_keep(mrb_state *mrb, struct RProc *proc, unsigned int stack_keep)
+mrb_top_run(mrb_state *mrb, struct RProc *proc, mrb_value self, unsigned int stack_keep)
 {
   mrb_callinfo *ci;
   mrb_value v;
 
   if (!mrb->c->cibase || mrb->c->ci == mrb->c->cibase) {
-    return mrb_context_run(mrb, proc, mrb_top_self(mrb), stack_keep);
+    return mrb_vm_run(mrb, proc, self, stack_keep);
   }
   ci = cipush(mrb);
   ci->nregs = 1;   /* protect the receiver */
   ci->acc = CI_ACC_SKIP;
   ci->target_class = mrb->object_class;
-  v = mrb_context_run(mrb, proc, mrb_top_self(mrb), stack_keep);
+  v = mrb_vm_run(mrb, proc, self, stack_keep);
   cipop(mrb);
 
   return v;
-}
-
-MRB_API mrb_value
-mrb_toplevel_run(mrb_state *mrb, struct RProc *proc)
-{
-  return mrb_toplevel_run_keep(mrb, proc, 0);
 }
