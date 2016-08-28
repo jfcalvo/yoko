@@ -77,6 +77,14 @@ module Yoko
       angle_center.y = new_center_y
     end
 
+    def alpha
+      @texture.alpha_mod
+    end
+
+    def alpha=(new_alpha)
+      @texture.alpha_mod = new_alpha
+    end
+
     private
 
     def angle_center
