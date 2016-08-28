@@ -6,8 +6,8 @@ def key_pressed?(scancode_name)
   Yoko::Input::Keyboard.key_pressed? scancode_name
 end
 
-def load_image(filename)
-  Yoko::Image.new(filename)
+def load_sprite(filename)
+  Yoko::Sprite.new(filename)
 end
 
 def window

@@ -1,5 +1,5 @@
 module Yoko
-  class Image
+  class Sprite
     attr_reader :rect
     attr_accessor :x, :y, :width, :height, :angle, :center_x, :center_y
 

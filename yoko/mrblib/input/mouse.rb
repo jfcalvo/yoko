@@ -24,7 +24,7 @@ module Yoko
         end
 
         def cursor=(new_cursor)
-          if new_cursor.is_a? Yoko::Image
+          if new_cursor.is_a? Yoko::Sprite
             SDL2::Input::Mouse.cursor_hide
           end
 

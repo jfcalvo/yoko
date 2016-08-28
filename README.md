@@ -23,7 +23,7 @@ config do |conf|
 end
 
 load do
-  square = load_image('my_square_image.png')
+  square = load_sprite('my_square_image.png')
   square.x, square.y = 50, 50
 end
 
