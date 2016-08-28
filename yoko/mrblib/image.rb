@@ -1,7 +1,7 @@
 module Yoko
   class Image
     attr_reader :rect
-    attr_accessor :x, :y, :width, :height, :angle
+    attr_accessor :x, :y, :width, :height, :angle, :center_x, :center_y
 
     def initialize(filename)
       @surface = SDL2::Video::Surface.load_img(Yoko::Tools.expand_path(filename))
@@ -13,7 +13,11 @@ module Yoko
     end
 
     def draw
-      Yoko.renderer.copy_ex(@texture, nil, @rect, angle)
+      if @angle_center
+        Yoko.renderer.copy_ex(@texture, nil, @rect, angle, angle_center)
+      else
+        Yoko.renderer.copy_ex(@texture, nil, @rect, angle)
+      end
     end
 
     def destroy
@@ -55,6 +59,28 @@ module Yoko
 
     def height=(new_height)
       @rect.h = new_height
+    end
+
+    def center_x
+      @angle_center.x if @angle_center
+    end
+
+    def center_x=(new_center_x)
+      angle_center.x = new_center_x
+    end
+
+    def center_y
+      @angle_center.y if @angle_center
+    end
+
+    def center_y=(new_center_y)
+      angle_center.y = new_center_y
+    end
+
+    private
+
+    def angle_center
+      @angle_center ||= SDL2::Point.new
     end
   end
 end
