@@ -13,11 +13,7 @@ module Yoko
     end
 
     def draw
-      if @angle_center
-        Yoko.renderer.copy_ex(@texture, nil, @rect, angle, angle_center)
-      else
-        Yoko.renderer.copy_ex(@texture, nil, @rect, angle)
-      end
+      Yoko.renderer.copy_ex(@texture, nil, @rect, angle, @angle_center)
     end
 
     def destroy
