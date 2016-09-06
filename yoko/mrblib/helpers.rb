@@ -6,8 +6,8 @@ def key_pressed?(scancode_name)
   Yoko::Input::Keyboard.key_pressed? scancode_name
 end
 
-def load_sprite(filename)
-  Yoko::Sprite.new(filename)
+def load_sprite(filename, options = {})
+  Yoko::Sprite.new(filename, options)
 end
 
 def window
@@ -18,7 +18,7 @@ def mouse
   Yoko::Input::Mouse
 end
 
-## Callbacks
+# Callbacks
 
 def config(&block)
   Yoko.config(&block)

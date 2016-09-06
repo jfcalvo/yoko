@@ -1,15 +1,18 @@
 module Yoko
   class Sprite
     attr_reader :rect
-    attr_accessor :x, :y, :width, :height, :angle, :center_x, :center_y
+    attr_accessor :x, :y, :width, :height, :scale, :angle, :alpha, :center_x, :center_y
 
-    def initialize(filename)
+    def initialize(filename, options = {})
       @surface = SDL2::Video::Surface.load_img(Yoko::Tools.expand_path(filename))
       @texture = SDL2::Video::Texture.new(Yoko.renderer, @surface)
-      @angle = 0.0
-      @width = @surface.clip_rect.w
-      @height = @surface.clip_rect.h
+      @angle = options.fetch(:angle, 0.0)
+      @scale = options.fetch(:scale, 1)
+      @width = @surface.clip_rect.w * @scale
+      @height = @surface.clip_rect.h * @scale
       @rect = SDL2::Rect.new(0, 0, @width, @height)
+
+      self.alpha = options[:alpha] if options[:alpha]
     end
 
     def draw
@@ -55,6 +58,16 @@ module Yoko
 
     def height=(new_height)
       @rect.h = new_height
+    end
+
+    def scale
+      @scale
+    end
+
+    def scale=(new_scale)
+      @scale = new_scale
+      self.width = @surface.clip_rect.w * @scale
+      self.height = @surface.clip_rect.h * @scale
     end
 
     def center_x
