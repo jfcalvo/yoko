@@ -1,5 +1,7 @@
 module Yoko
   class Sprite
+    include Yoko::Easings
+
     attr_reader :rect
     attr_accessor :x, :y, :width, :height, :scale, :angle, :alpha, :center_x, :center_y
 
@@ -11,11 +13,16 @@ module Yoko
       @width = @surface.clip_rect.w * @scale
       @height = @surface.clip_rect.h * @scale
       @rect = SDL2::Rect.new(0, 0, @width, @height)
+      @easings = {}
 
       self.alpha = options[:alpha] if options[:alpha]
     end
 
     def draw
+      @easings.each do |attribute, easing|
+        easing.alive? ? easing.resume : @easings.delete(attribute)
+      end
+
       Yoko.renderer.copy_ex(@texture, nil, @rect, angle, @angle_center)
     end
 
@@ -92,6 +99,29 @@ module Yoko
 
     def alpha=(new_alpha)
       @texture.alpha_mod = new_alpha
+    end
+
+    def animate(attribute, final_position, duration, options = {})
+      beginning = send(attribute)
+      change = final_position - beginning
+      initial_time = SDL2::Timer.ticks
+      easing = options.fetch(:easing, :linear)
+
+      @easings[attribute] = Fiber.new do
+        while send(attribute) != final_position
+          time = SDL2::Timer.ticks - initial_time
+
+          if time > duration
+            new_position = final_position
+          else
+            new_position = send(easing, time, beginning, change, duration)
+          end
+
+          send("#{attribute}=", new_position)
+
+          Fiber.yield
+        end
+      end
     end
 
     private
