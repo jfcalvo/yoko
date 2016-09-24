@@ -101,7 +101,7 @@ module Yoko
       @texture.alpha_mod = new_alpha
     end
 
-    def animate(attribute, final_position, duration, options = {})
+    def animate(attribute, final_position, duration, options = {}, &block)
       beginning = send(attribute)
       change = final_position - beginning
       initial_time = SDL2::Timer.ticks
@@ -121,7 +121,13 @@ module Yoko
 
           Fiber.yield
         end
+
+        block.call(self) if block
       end
+    end
+
+    def animating?(attribute=nil)
+      attribute ? @easings.has_key?(attribute) : !@easings.empty?
     end
 
     private
