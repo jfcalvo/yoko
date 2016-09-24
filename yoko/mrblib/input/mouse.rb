@@ -4,9 +4,6 @@ module Yoko
       class << self
         attr_accessor :x, :y, :cursor
 
-        # I don't like to have an image as a mouse cursor.
-        # We should use some sprite class (image + position) so we can use
-        # image class that should not have position.
         def x
           @cursor.x if @cursor
         end
@@ -16,11 +13,11 @@ module Yoko
         end
 
         def x=(new_x)
-          @cursor.x = new_x if @cursor # Not very good idea to modify a image position to change mouse
+          @cursor.x = new_x if @cursor
         end
 
         def y=(new_y)
-          @cursor.y = new_y if @cursor # Not very good idea to modify a image position to change mouse
+          @cursor.y = new_y if @cursor
         end
 
         def cursor=(new_cursor)
@@ -33,6 +30,22 @@ module Yoko
 
         def draw
           @cursor.draw if @cursor
+        end
+
+        def button_pressed(button_name)
+          mouse_state[button_name] = true
+        end
+
+        def button_released(button_name)
+          mouse_state[button_name] = false
+        end
+
+        def button_pressed?(button_name)
+          mouse_state[button_name] == true
+        end
+
+        def mouse_state
+          @mouse_state ||= {}
         end
       end
     end
