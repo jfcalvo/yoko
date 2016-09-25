@@ -6,6 +6,21 @@ module Yoko
       end
     end
 
+    def animate_loop(attribute, final_position, duration, options = {}, &block)
+      beginning = send(attribute)
+      animate_to_final_position = nil
+      animate_to_beginning = lambda do |animable|
+        animable.animate(attribute, beginning, duration, options, &animate_to_final_position)
+      end
+
+      animate_to_final_position = lambda do |animable|
+        animable.animate(attribute, final_position, duration, options, &animate_to_beginning)
+        block.call(animable) if block
+      end
+
+      animate(attribute, final_position, duration, options, &animate_to_beginning)
+    end
+
     def animate(attribute, final_position, duration, options = {}, &block)
       beginning = send(attribute)
       change = final_position - beginning
