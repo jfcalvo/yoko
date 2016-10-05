@@ -1,27 +1,21 @@
 module Yoko
   class << self
-    def window
-      @window ||= SDL2::Video::Window.new(
-        Yoko::Config::Window.title,
-        SDL2::Video::Window::SDL_WINDOWPOS_CENTERED,
-        SDL2::Video::Window::SDL_WINDOWPOS_CENTERED,
-        Yoko::Config::Window.width,
-        Yoko::Config::Window.height,
-        window_flags
-      )
-    end
-
-    def renderer
-      @renderer ||= SDL2::Video::Renderer.new(
-        window,
-        -1,
-        SDL2::Video::Renderer::SDL_RENDERER_ACCELERATED |
-        SDL2::Video::Renderer::SDL_RENDERER_PRESENTVSYNC
-      )
-    end
-
     def loop
       SDL2::init(SDL2::SDL_INIT_VIDEO|SDL2::SDL_INIT_EVENTS|SDL2::SDL_INIT_TIMER)
+
+      if Yoko::Config::Graphics.scale_quality
+        SDL2::Hints.set(
+          SDL2::Hints::SDL_HINT_RENDER_SCALE_QUALITY,
+          Yoko::Config::Graphics.scale_quality
+        )
+      end
+
+      if Yoko::Config::Window.fullscreen == :desktop
+        Yoko::Renderer.instance.set_logical_size(
+          Yoko::Config::Window.width,
+          Yoko::Config::Window.height
+        )
+      end
 
       @load_proc.call if @load_proc
 
@@ -33,7 +27,7 @@ module Yoko
       until @quit
         Yoko::Input.poll
 
-        Yoko.renderer.clear
+        Yoko::Renderer.instance.clear
 
         @update_proc.call if @update_proc # Update callback
 
@@ -41,7 +35,7 @@ module Yoko
 
         Yoko::Input::Mouse.draw # Drawing mouse in front of every other graphic
 
-        Yoko.renderer.present
+        Yoko::Renderer.instance.present
 
         # Constant speed implementation
         next_tick += skip_ticks
@@ -75,27 +69,6 @@ module Yoko
       else
         @quit = true
       end
-    end
-
-    private
-
-    def window_flags
-      # Initial window flags
-      window_flags = SDL2::Video::Window::SDL_WINDOW_SHOWN
-
-      # Check fullscreen flags
-      case Yoko::Config::Window.fullscreen
-      when :desktop
-        window_flags |= SDL2::Video::Window::SDL_WINDOW_FULLSCREEN_DESKTOP
-      when :exclusive
-        window_flags |= SDL2::Video::Window::SDL_WINDOW_FULLSCREEN
-      when :windowed
-        # Default fullscreen mode, we do nothing
-      else
-        raise "Fullscreen mode `#{Yoko::Config::Window.fullscreen}` is no valid."
-      end
-
-      window_flags
     end
   end
 end

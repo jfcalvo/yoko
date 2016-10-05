@@ -8,27 +8,28 @@ module Yoko
 
     def initialize(filename, options = {})
       @surface = SDL2::Video::Surface.load_img(Yoko::Tools.expand_path(filename))
-      @texture = SDL2::Video::Texture.new(Yoko.renderer, @surface)
+      @texture = SDL2::Video::Texture.new(Yoko::Renderer.instance, @surface)
       @angle = options.fetch(:angle, 0.0)
       @scale = options.fetch(:scale, 1)
       @width = @surface.clip_rect.w * @scale
       @height = @surface.clip_rect.h * @scale
       @rect = SDL2::Rect.new(0, 0, @width, @height)
 
+      self.x = options[:x] if options[:x]
+      self.y = options[:y] if options[:y]
       self.alpha = options[:alpha] if options[:alpha]
     end
 
     def draw
       update_easings
 
-      Yoko.renderer.copy_ex(@texture, nil, @rect, angle, @angle_center)
+      Yoko::Renderer.instance.copy_ex(@texture, nil, @rect, angle, @angle_center)
     end
 
     def destroy
       # TODO
     end
 
-    # We should add pixel level collision detector
     def collides_with?(other_image)
       @rect.has_intersection? other_image.rect
     end
