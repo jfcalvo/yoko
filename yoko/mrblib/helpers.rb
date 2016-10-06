@@ -2,8 +2,8 @@ def set_fullscreen(mode)
   Yoko::Window.fullscreen = mode
 end
 
-def set_mouse_cursor(filename)
-  Yoko::Input::Mouse.cursor = load_sprite(filename)
+def set_mouse_cursor(filename, options = {})
+  Yoko::Input::Mouse.cursor = load_sprite(filename, options)
 end
 
 def key_pressed?(scancode_name)

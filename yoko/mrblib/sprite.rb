@@ -4,19 +4,30 @@ module Yoko
     include Yoko::Animable
 
     attr_reader :rect
-    attr_accessor :x, :y, :width, :height, :scale, :angle, :alpha, :center_x, :center_y
+    attr_accessor(
+      :x, :y,
+      :width, :height,
+      :scale, :scale_x, :scale_y,
+      :angle,
+      :center_x, :center_y,
+      :alpha
+    )
 
     def initialize(filename, options = {})
       @surface = SDL2::Video::Surface.load_img(Yoko::Tools.expand_path(filename))
       @texture = SDL2::Video::Texture.new(Yoko::Renderer.instance, @surface)
       @angle = options.fetch(:angle, 0.0)
       @scale = options.fetch(:scale, 1)
+      @scale_x = options.fetch(:scale_x, 1)
+      @scale_y = options.fetch(:scale_y, 1)
       @width = @surface.clip_rect.w * @scale
       @height = @surface.clip_rect.h * @scale
       @rect = SDL2::Rect.new(0, 0, @width, @height)
 
       self.x = options[:x] if options[:x]
       self.y = options[:y] if options[:y]
+      self.scale_x = options[:scale_x] if options[:scale_x]
+      self.scale_y = options[:scale_y] if options[:scale_y]
       self.alpha = options[:alpha] if options[:alpha]
     end
 
@@ -66,14 +77,20 @@ module Yoko
       @rect.h = new_height
     end
 
-    def scale
-      @scale
-    end
-
     def scale=(new_scale)
       @scale = new_scale
-      self.width = @surface.clip_rect.w * @scale
-      self.height = @surface.clip_rect.h * @scale
+      self.scale_x = @scale
+      self.scale_y = @scale
+    end
+
+    def scale_x=(new_scale_x)
+      @scale_x = new_scale_x
+      self.width = @surface.clip_rect.w * @scale_x
+    end
+
+    def scale_y=(new_scale_y)
+      @scale_y = new_scale_y
+      self.height = @surface.clip_rect.h * @scale_y
     end
 
     def center_x
