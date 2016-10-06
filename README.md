@@ -59,6 +59,12 @@ You can easily install them with brew (on MacOS):
 $ brew install sdl2 sdl2_image
 ```
 
+or with apt-get (on Debian-based distributions):
+
+```sh
+# apt-get install libsdl2-dev libsdl2-image-dev
+```
+
 ## Compilation
 
 After install dependencies you can compile yoko:
