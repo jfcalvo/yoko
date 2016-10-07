@@ -23,6 +23,7 @@ module Yoko
       @width = @surface.clip_rect.w * @scale
       @height = @surface.clip_rect.h * @scale
       @rect = SDL2::Rect.new(0, 0, @width, @height)
+      @destroyed = false
 
       self.x = options[:x] if options[:x]
       self.y = options[:y] if options[:y]
@@ -32,13 +33,21 @@ module Yoko
     end
 
     def draw
+      return if @destroyed
+
       update_easings
 
       Yoko::Renderer.instance.copy_ex(@texture, nil, @rect, angle, @angle_center)
     end
 
     def destroy
-      # TODO
+      @surface.destroy
+      @texture.destroy
+      @destroyed = true
+    end
+
+    def destroyed?
+      @destroyed
     end
 
     def collides_with?(other_image)
