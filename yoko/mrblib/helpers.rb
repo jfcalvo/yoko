@@ -2,6 +2,10 @@ def set_fullscreen(mode)
   Yoko::Window.fullscreen = mode
 end
 
+def set_background_color(red, green, blue)
+  Yoko::Renderer.set_draw_color(red, green, blue)
+end
+
 def set_mouse_cursor(filename, options = {})
   Yoko::Input::Mouse.cursor = load_sprite(filename, options)
 end

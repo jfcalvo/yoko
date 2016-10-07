@@ -5,6 +5,10 @@ module Yoko
         @renderer ||= SDL2::Video::Renderer.new(Yoko::Window.instance, -1, renderer_flags)
       end
 
+      def set_draw_color(red, green, blue)
+        instance.draw_color = SDL2::RGBA.new(red, green, blue, 255)
+      end
+
       private
 
       def renderer_flags
