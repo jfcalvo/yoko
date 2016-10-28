@@ -4,20 +4,20 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include <mruby.h>
+#include "mruby.h"
 
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
-#include <mruby/string.h>
-#include <mruby/hash.h>
-#include <mruby/numeric.h>
+#include "mruby/string.h"
+#include "mruby/hash.h"
+#include "mruby/numeric.h"
 #include <math.h>
 #include <ctype.h>
 
 #define BIT_DIGITS(N)   (((N)*146)/485 + 1)  /* log2(10) =~ 146/485 */
 #define BITSPERDIG MRB_INT_BIT
-#define EXTENDSIGN(n, l) (((~0U << (n)) >> (((n)*(l)) % BITSPERDIG)) & ~(~0U << (n)))
+#define EXTENDSIGN(n, l) (((~0 << (n)) >> (((n)*(l)) % BITSPERDIG)) & ~(~0 << (n)))
 
 mrb_value mrb_str_format(mrb_state *, int, const mrb_value *, mrb_value);
 static void fmt_setup(char*,size_t,int,int,mrb_int,mrb_int);
@@ -71,7 +71,7 @@ sign_bits(int base, const char *p)
 static mrb_value
 mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
 {
-  char buf[66], *b = buf + sizeof buf;
+  char buf[64], *b = buf + sizeof buf;
   mrb_int num = mrb_fixnum(x);
   uint64_t val = (uint64_t)num;
   char d;
@@ -79,6 +79,10 @@ mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
   if (base != 2) {
     mrb_raisef(mrb, E_ARGUMENT_ERROR, "invalid radix %S", mrb_fixnum_value(base));
   }
+
+  if (val >= (1 << 10))
+    val &= 0x3ff;
+
   if (val == 0) {
     return mrb_str_new_lit(mrb, "0");
   }
@@ -759,18 +763,26 @@ retry:
       case 'B':
       case 'u': {
         mrb_value val = GETARG();
-        char nbuf[68], *s;
+        char fbuf[32], nbuf[64], *s;
         const char *prefix = NULL;
         int sign = 0, dots = 0;
         char sc = 0;
-        mrb_int v = 0;
+        mrb_int v = 0, org_v = 0;
         int base;
         mrb_int len;
 
         switch (*p) {
           case 'd':
           case 'i':
+          case 'u':
             sign = 1; break;
+          case 'o':
+          case 'x':
+          case 'X':
+          case 'b':
+          case 'B':
+            if (flags&(FPLUS|FSPACE)) sign = 1;
+            break;
           default:
             break;
         }
@@ -788,6 +800,10 @@ retry:
   bin_retry:
         switch (mrb_type(val)) {
           case MRB_TT_FLOAT:
+            if (FIXABLE(mrb_float(val))) {
+              val = mrb_fixnum_value((mrb_int)mrb_float(val));
+              goto bin_retry;
+            }
             val = mrb_flo_to_fixnum(mrb, val);
             if (mrb_fixnum_p(val)) goto bin_retry;
             break;
@@ -819,6 +835,7 @@ retry:
         }
 
         if (base == 2) {
+          org_v = v;
           if (v < 0 && !sign) {
             val = mrb_fix2binstr(mrb, mrb_fixnum_value(v), base);
             dots = 1;
@@ -826,53 +843,39 @@ retry:
           else {
             val = mrb_fixnum_to_str(mrb, mrb_fixnum_value(v), base);
           }
+          v = mrb_fixnum(mrb_str_to_inum(mrb, val, 10, FALSE));
         }
         if (sign) {
-          if (v > 0) {
-            if (flags & FPLUS) {
-              sc = '+';
-              width--;
-            }
-            else if (flags & FSPACE) {
-              sc = ' ';
-              width--;
-            }
+          char c = *p;
+          if (c == 'i') c = 'd'; /* %d and %i are identical */
+          if (base == 2) c = 'd';
+          if (v < 0) {
+            v = -v;
+            sc = '-';
+            width--;
           }
-          switch (base) {
-          case 2:
-            strncpy(nbuf, RSTRING_PTR(val), sizeof(nbuf));
-            break;
-          case 8:
-            snprintf(nbuf, sizeof(nbuf), "%"MRB_PRIo, v);
-            break;
-          case 10:
-            snprintf(nbuf, sizeof(nbuf), "%"MRB_PRId, v);
-            break;
-          case 16:
-            snprintf(nbuf, sizeof(nbuf), "%"MRB_PRIx, v);
-            break;
+          else if (flags & FPLUS) {
+            sc = '+';
+            width--;
           }
+          else if (flags & FSPACE) {
+            sc = ' ';
+            width--;
+          }
+          snprintf(fbuf, sizeof(fbuf), "%%l%c", c);
+          snprintf(nbuf, sizeof(nbuf), fbuf, v);
           s = nbuf;
         }
         else {
+          char c = *p;
+          if (c == 'X') c = 'x';
+          if (base == 2) c = 'd';
           s = nbuf;
           if (v < 0) {
             dots = 1;
           }
-          switch (base) {
-          case 2:
-            strncpy(++s, RSTRING_PTR(val), sizeof(nbuf)-1);
-            break;
-          case 8:
-            snprintf(++s, sizeof(nbuf)-1, "%"MRB_PRIo, v);
-            break;
-          case 10:
-            snprintf(++s, sizeof(nbuf)-1, "%"MRB_PRId, v);
-            break;
-          case 16:
-            snprintf(++s, sizeof(nbuf)-1, "%"MRB_PRIx, v);
-            break;
-          }
+          snprintf(fbuf, sizeof(fbuf), "%%l%c", c);
+          snprintf(++s, sizeof(nbuf) - 1, fbuf, v);
           if (v < 0) {
             char d;
 
@@ -962,7 +965,7 @@ retry:
         CHECK(prec - len);
         if (dots) PUSH("..", 2);
 
-        if (v < 0) {
+        if (v < 0 || (base == 2 && org_v < 0)) {
           char c = sign_bits(base, p);
           while (len < prec--) {
             buf[blen++] = c;

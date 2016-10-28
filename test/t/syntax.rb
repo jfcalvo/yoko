@@ -38,13 +38,6 @@ assert('yield', '11.3.5') do
   assert_raise LocalJumpError do
     yield
   end
-  assert_raise LocalJumpError do
-    o = Object.new
-    def o.foo
-      yield
-    end
-    o.foo
-  end
 end
 
 assert('Abbreviated variable assignment', '11.4.2.3.2') do

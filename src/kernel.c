@@ -4,13 +4,13 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include <mruby.h>
-#include <mruby/array.h>
-#include <mruby/class.h>
-#include <mruby/proc.h>
-#include <mruby/string.h>
-#include <mruby/variable.h>
-#include <mruby/error.h>
+#include "mruby.h"
+#include "mruby/array.h"
+#include "mruby/class.h"
+#include "mruby/proc.h"
+#include "mruby/string.h"
+#include "mruby/variable.h"
+#include "mruby/error.h"
 
 typedef enum {
   NOEX_PUBLIC    = 0x00,
@@ -722,7 +722,9 @@ mrb_obj_singleton_methods(mrb_state *mrb, mrb_bool recur, mrb_value obj)
 static mrb_value
 mrb_obj_methods(mrb_state *mrb, mrb_bool recur, mrb_value obj, mrb_method_flag_t flag)
 {
-  return mrb_class_instance_method_list(mrb, recur, mrb_class(mrb, obj), 0);
+  if (recur)
+    return mrb_class_instance_method_list(mrb, recur, mrb_class(mrb, obj), 0);
+  return mrb_obj_singleton_methods(mrb, recur, obj);
 }
 /* 15.3.1.3.31 */
 /*

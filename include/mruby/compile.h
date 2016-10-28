@@ -7,14 +7,14 @@
 #ifndef MRUBY_COMPILE_H
 #define MRUBY_COMPILE_H
 
-#include "common.h"
+#include "mruby/common.h"
 
 /**
  * MRuby Compiler
  */
 MRB_BEGIN_DECL
 
-#include <mruby.h>
+#include "mruby.h"
 
 struct mrb_jmpbuf;
 
@@ -39,6 +39,8 @@ MRB_API mrbc_context* mrbc_context_new(mrb_state *mrb);
 MRB_API void mrbc_context_free(mrb_state *mrb, mrbc_context *cxt);
 MRB_API const char *mrbc_filename(mrb_state *mrb, mrbc_context *c, const char *s);
 MRB_API void mrbc_partial_hook(mrb_state *mrb, mrbc_context *c, int (*partial_hook)(struct mrb_parser_state*), void*data);
+
+MRB_API mrb_value mrb_toplevel_run_keep(mrb_state*, struct RProc*, unsigned int);
 
 /* AST node structure */
 typedef struct mrb_ast_node {
@@ -102,8 +104,7 @@ struct mrb_parser_heredoc_info {
   mrb_ast_node *doc;
 };
 
-#define MRB_PARSER_TOKBUF_MAX 65536
-#define MRB_PARSER_TOKBUF_SIZE 256
+#define MRB_PARSER_BUF_SIZE 1024
 
 /* parser structure */
 struct mrb_parser_state {
@@ -131,10 +132,8 @@ struct mrb_parser_state {
   mrb_ast_node *locals;
 
   mrb_ast_node *pb;
-  char *tokbuf;
-  char buf[MRB_PARSER_TOKBUF_SIZE];
-  int tidx;
-  int tsiz;
+  char buf[MRB_PARSER_BUF_SIZE];
+  int bidx;
 
   mrb_ast_node *all_heredocs;	/* list of mrb_parser_heredoc_info* */
   mrb_ast_node *heredocs_from_nextline;

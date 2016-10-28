@@ -153,9 +153,6 @@ MRuby::Gem::Specification.new('c_and_ruby_extension_example') do |spec|
 
   # Use latest mruby-onig-regexp from github. (version requirements can be omitted)
   spec.add_dependency('mruby-onig-regexp', :github => 'mattn/mruby-onig-regexp')
-
-  # You can add extra mgems active only on test
-  spec.add_test_dependency('mruby-process', :github => 'iij/mruby-process')
 end
 ```
 

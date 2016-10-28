@@ -12,10 +12,15 @@ class Array
   def each(&block)
     return to_enum :each unless block_given?
 
-    idx = 0
-    while idx < length
-      block.call(self[idx])
-      idx += 1
+    idx, length = -1, self.length-1
+    while idx < length and length <= self.length and length = self.length-1
+      elm = self[idx += 1]
+      unless elm
+        if elm.nil? and length >= self.length
+          break
+        end
+      end
+      block.call(elm)
     end
     self
   end

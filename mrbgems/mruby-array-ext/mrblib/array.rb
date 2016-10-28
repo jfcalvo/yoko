@@ -1,31 +1,6 @@
 class Array
   ##
   # call-seq:
-  #    Array.try_convert(obj) -> array or nil
-  #
-  # Tries to convert +obj+ into an array, using +to_ary+ method.
-  # converted array or +nil+ if +obj+ cannot be converted for any reason.
-  # This method can be used to check if an argument is an array.
-  #
-  #    Array.try_convert([1])   #=> [1]
-  #    Array.try_convert("1")   #=> nil
-  #
-  #    if tmp = Array.try_convert(arg)
-  #      # the argument is an array
-  #    elsif tmp = String.try_convert(arg)
-  #      # the argument is a string
-  #    end
-  #
-  def self.try_convert(obj)
-    if obj.respond_to?(:to_ary)
-      obj.to_ary
-    else
-      nil
-    end
-  end
-
-  ##
-  # call-seq:
   #    ary.uniq!                -> ary or nil
   #    ary.uniq! { |item| ... } -> ary or nil
   #
@@ -733,32 +708,5 @@ class Array
       return self.__ary_index(val)
     end
     nil
-  end
-
-  ##
-  #  call-seq:
-  #     ary.to_ary -> ary
-  #
-  #  Returns +self+.
-  #
-  def to_ary
-    self
-  end
-
-  ##
-  # call-seq:
-  #   ary.dig(idx, ...)                 -> object
-  #
-  # Extracts the nested value specified by the sequence of <i>idx</i>
-  # objects by calling +dig+ at each step, returning +nil+ if any
-  # intermediate step is +nil+.
-  #
-  def dig(idx,*args)
-    n = self[idx]
-    if args.size > 0
-      n&.dig(*args)
-    else
-      n
-    end
   end
 end

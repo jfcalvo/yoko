@@ -10,7 +10,11 @@ def t_print(*args)
   len = args.size
   while i < len
     str = args[i].to_s
-    __t_printstr__ str rescue print str
+    begin
+      __printstr__ str
+    rescue NoMethodError
+      __t_printstr__ str rescue print str
+    end
     i += 1
   end
 end
