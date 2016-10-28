@@ -12,7 +12,7 @@ clean:
 	rm -f bin/iyoko
 
 pull_mruby:
-	git subtree pull --prefix mruby git@github.com:jfcalvo/yoko-mruby.git yoko --squash
+	git subtree pull --prefix mruby git@github.com:jfcalvo/yoko-mruby.git yoko-1.2.0 --squash
 
 pull_mruby_sdl2:
 	git subtree pull --prefix mruby-sdl2 git@github.com:jfcalvo/yoko-mruby-sdl2.git yoko --squash
