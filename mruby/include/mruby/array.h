@@ -7,7 +7,7 @@
 #ifndef MRUBY_ARRAY_H
 #define MRUBY_ARRAY_H
 
-#include "common.h"
+#include "mruby/common.h"
 
 /*
  * Array class

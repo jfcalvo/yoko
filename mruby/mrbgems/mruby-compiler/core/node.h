@@ -4,8 +4,8 @@
 ** See Copyright Notice in mruby.h
 */
 
-#ifndef MRUBY_COMPILER_NODE_H
-#define MRUBY_COMPILER_NODE_H
+#ifndef NODE_H
+#define NODE_H
 
 enum node_type {
   NODE_METHOD,
@@ -38,7 +38,6 @@ enum node_type {
   NODE_CVDECL,
   NODE_OP_ASGN,
   NODE_CALL,
-  NODE_SCALL,
   NODE_FCALL,
   NODE_VCALL,
   NODE_SUPER,
@@ -115,4 +114,4 @@ enum node_type {
   NODE_LAST
 };
 
-#endif  /* MRUBY_COMPILER_NODE_H */
+#endif  /* NODE_H */

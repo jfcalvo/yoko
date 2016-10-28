@@ -4,11 +4,11 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include <mruby.h>
-#include <mruby/array.h>
-#include <mruby/class.h>
-#include <mruby/proc.h>
-#include <mruby/string.h>
+#include "mruby.h"
+#include "mruby/array.h"
+#include "mruby/class.h"
+#include "mruby/proc.h"
+#include "mruby/string.h"
 
 typedef int (iv_foreach_func)(mrb_state*,mrb_sym,mrb_value,void*);
 
@@ -282,7 +282,7 @@ iv_free(mrb_state *mrb, iv_tbl *t)
 
 #else
 
-#include <mruby/khash.h>
+#include "mruby/khash.h"
 
 #ifndef MRB_IVHASH_INIT_SIZE
 #define MRB_IVHASH_INIT_SIZE 8
@@ -773,7 +773,7 @@ mrb_mod_cv_get(mrb_state *mrb, struct RClass * c, mrb_sym sym)
     klass = mrb_obj_iv_get(mrb, (struct RObject *)cls,
                            mrb_intern_lit(mrb, "__attached__"));
     c = mrb_class_ptr(klass);
-    if (c->tt == MRB_TT_CLASS || c->tt == MRB_TT_MODULE) {
+    if (c->tt == MRB_TT_CLASS) {
       while (c) {
         if (c->iv && iv_get(mrb, c->iv, sym, &v)) {
           return v;

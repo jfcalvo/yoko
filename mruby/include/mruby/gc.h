@@ -7,7 +7,7 @@
 #ifndef MRUBY_GC_H
 #define MRUBY_GC_H
 
-#include "common.h"
+#include "mruby/common.h"
 
 /**
  * Uncommon memory management stuffs.

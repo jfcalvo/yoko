@@ -6,17 +6,17 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include <mruby.h>
-#include <mruby/array.h>
-#include <mruby/class.h>
-#include <mruby/data.h>
-#include <mruby/hash.h>
-#include <mruby/proc.h>
-#include <mruby/range.h>
-#include <mruby/string.h>
-#include <mruby/variable.h>
-#include <mruby/gc.h>
-#include <mruby/error.h>
+#include "mruby.h"
+#include "mruby/array.h"
+#include "mruby/class.h"
+#include "mruby/data.h"
+#include "mruby/hash.h"
+#include "mruby/proc.h"
+#include "mruby/range.h"
+#include "mruby/string.h"
+#include "mruby/variable.h"
+#include "mruby/gc.h"
+#include "mruby/error.h"
 
 /*
   = Tri-color Incremental Garbage Collection
@@ -137,7 +137,7 @@ gettimeofday_time(void)
   fprintf(stderr, "%s\n", with);\
   fprintf(stderr, "gc_invoke: %19.3f\n", gettimeofday_time() - program_invoke_time);\
   fprintf(stderr, "is_generational: %d\n", is_generational(gc));\
-  fprintf(stderr, "is_major_gc: %d\n", is_major_gc(gc));\
+  fprintf(stderr, "is_major_gc: %d\n", is_major_gc(mrb));\
 } while(0)
 
 #define GC_TIME_START do {\
@@ -215,7 +215,6 @@ mrb_realloc(mrb_state *mrb, void *p, size_t len)
   p2 = mrb_realloc_simple(mrb, p, len);
   if (!p2 && len) {
     if (mrb->gc.out_of_memory) {
-      mrb_exc_raise(mrb, mrb_obj_value(mrb->nomem_err));
       /* mrb_panic(mrb); */
     }
     else {
@@ -453,7 +452,7 @@ mrb_gc_unregister(mrb_state *mrb, mrb_value obj)
   mrb_sym root = mrb_intern_lit(mrb, GC_ROOT_NAME);
   mrb_value table = mrb_gv_get(mrb, root);
   struct RArray *a;
-  mrb_int i, len;
+  mrb_int i, j;
 
   if (mrb_nil_p(table)) return;
   if (mrb_type(table) != MRB_TT_ARRAY) {
@@ -462,14 +461,12 @@ mrb_gc_unregister(mrb_state *mrb, mrb_value obj)
   }
   a = mrb_ary_ptr(table);
   mrb_ary_modify(mrb, a);
-  len = a->len-1;
-  for (i=0; i<len; i++) {
-    if (mrb_obj_eq(mrb, a->ptr[i], obj)) {
-      memmove(&a->ptr[i], &a->ptr[i+1], len-i);
-      break;
+  for (i=j=0; i<a->len; i++) {
+    if (!mrb_obj_eq(mrb, a->ptr[i], obj)) {
+      a->ptr[j++] = a->ptr[i];
     }
   }
-  a->len--;
+  a->len = j;
 }
 
 MRB_API struct RBasic*
@@ -616,11 +613,14 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
   case MRB_TT_ENV:
     {
       struct REnv *e = (struct REnv*)obj;
-      mrb_int i, len;
 
-      len = MRB_ENV_STACK_LEN(e);
-      for (i=0; i<len; i++) {
-        mrb_gc_mark_value(mrb, e->stack[i]);
+      if (!MRB_ENV_STACK_SHARED_P(e)) {
+        mrb_int i, len;
+
+        len = MRB_ENV_STACK_LEN(e);
+        for (i=0; i<len; i++) {
+          mrb_gc_mark_value(mrb, e->stack[i]);
+        }
       }
     }
     break;
@@ -697,13 +697,8 @@ obj_free(mrb_state *mrb, struct RBasic *obj)
 #endif
 
   case MRB_TT_OBJECT:
-    mrb_gc_free_iv(mrb, (struct RObject*)obj);
-    break;
-
   case MRB_TT_EXCEPTION:
     mrb_gc_free_iv(mrb, (struct RObject*)obj);
-    if ((struct RObject*)obj == mrb->backtrace.exc)
-      mrb->backtrace.exc = 0;
     break;
 
   case MRB_TT_CLASS:
@@ -730,19 +725,9 @@ obj_free(mrb_state *mrb, struct RBasic *obj)
   case MRB_TT_FIBER:
     {
       struct mrb_context *c = ((struct RFiber*)obj)->cxt;
-      if (c && c != mrb->root_c) {
-        mrb_callinfo *ci = c->ci;
-        mrb_callinfo *ce = c->cibase;
 
-        while (ce <= ci) {
-          struct REnv *e = ci->env;
-          if (e && !is_dead(&mrb->gc, e) && MRB_ENV_STACK_SHARED_P(e)) {
-            mrb_env_unshare(mrb, e);
-          }
-          ci--;
-        }
+      if (c != mrb->root_c)
         mrb_free_context(mrb, c);
-      }
     }
     break;
 

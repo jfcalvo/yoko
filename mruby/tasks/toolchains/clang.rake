@@ -1,4 +1,4 @@
-MRuby::Toolchain.new(:clang) do |conf, _params|
+MRuby::Toolchain.new(:clang) do |conf|
   toolchain :gcc
 
   [conf.cc, conf.objc, conf.asm].each do |cc|

@@ -7,7 +7,7 @@
 #ifndef MRUBY_RANGE_H
 #define MRUBY_RANGE_H
 
-#include "common.h"
+#include "mruby/common.h"
 
 /**
  * Range class

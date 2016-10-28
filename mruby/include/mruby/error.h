@@ -7,7 +7,7 @@
 #ifndef MRUBY_ERROR_H
 #define MRUBY_ERROR_H
 
-#include "common.h"
+#include "mruby/common.h"
 
 /**
  * MRuby error handling.

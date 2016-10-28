@@ -22,7 +22,7 @@ MRuby::Build.new do |conf|
   # include the default GEMs
   conf.gembox 'default'
 
-  # yoko gems
+  # include yoko GEMs
   conf.gem '../mruby-sdl2'
   conf.gem '../mruby-io'
   conf.gem '../yoko'
@@ -124,18 +124,6 @@ MRuby::Build.new('test') do |conf|
   enable_debug
   conf.enable_bintest
   conf.enable_test
-
-  conf.gembox 'default'
-end
-
-MRuby::Build.new('bench') do |conf|
-  # Gets set by the VS command prompts.
-  if ENV['VisualStudioVersion'] || ENV['VSINSTALLDIR']
-    toolchain :visualcpp
-  else
-    toolchain :gcc
-    conf.cc.flags << '-O3'
-  end
 
   conf.gembox 'default'
 end

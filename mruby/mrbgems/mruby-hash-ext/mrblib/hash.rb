@@ -62,25 +62,6 @@ class Hash
 
   ##
   # call-seq:
-  #     Hash.try_convert(obj) -> hash or nil
-  #
-  # Try to convert <i>obj</i> into a hash, using to_hash method.
-  # Returns converted hash or nil if <i>obj</i> cannot be converted
-  # for any reason.
-  #
-  #     Hash.try_convert({1=>2})   # => {1=>2}
-  #     Hash.try_convert("1=>2")   # => nil
-  #
-  def self.try_convert(obj)
-    if obj.respond_to?(:to_hash)
-      obj.to_hash
-    else
-      nil
-    end
-  end
-
-  ##
-  # call-seq:
   #     hsh.merge!(other_hash)                                 -> hsh
   #     hsh.merge!(other_hash){|key, oldval, newval| block}    -> hsh
   #
@@ -364,22 +345,5 @@ class Hash
     size >= hash.size and hash.all? {|key, val|
       key?(key) and self[key] == val
     }
-  end
-
-  ##
-  # call-seq:
-  #   hsh.dig(key,...)                 -> object
-  #
-  # Extracts the nested value specified by the sequence of <i>key</i>
-  # objects by calling +dig+ at each step, returning +nil+ if any
-  # intermediate step is +nil+.
-  #
-  def dig(idx,*args)
-    n = self[idx]
-    if args.size > 0
-      n&.dig(*args)
-    else
-      n
-    end
   end
 end
